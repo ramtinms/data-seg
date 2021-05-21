@@ -22,27 +22,6 @@ type Segment interface {
 	ID() SegmentID
 }
 
-// think of it as ledger
-type SegmentProvider struct {
-	segments map[SegmentID]Segment
-}
-
-func NewSegmentProvider() *SegmentProvider {
-	return &SegmentProvider{segments: make(map[SegmentID]Segment, 0)}
-}
-
-func (s *SegmentProvider) GetSegment(id SegmentID) Segment {
-	return s.segments[id]
-}
-
-func (s *SegmentProvider) AddSegment(seg Segment) {
-	s.segments[seg.ID()] = seg
-}
-
-func (s *SegmentProvider) RemoveSegment(seg Segment) {
-	delete(s.segments, seg.ID())
-}
-
 // TODO change this later to generic
 type Storable struct {
 	index uint32
@@ -159,7 +138,7 @@ func (a *ArraySegment) RemoveStorable(index uint32) {
 
 func (a *ArraySegment) Split() (seg2 *ArraySegment) {
 	// TODO change this logic to act based on the size of values (if hetro)
-	// this compute the ceil of split keep the first part with more members (optimized for aditions)
+	// this compute the ceil of split keep the first part with more members (optimized for append operations)
 	d := float64(len(a.elements)) / float64(2)
 	breakPoint := int(math.Ceil(d))
 
@@ -214,7 +193,7 @@ func (a ArrayMetaSegment) ID() SegmentID {
 
 type Array struct {
 	metaSegmentID SegmentID
-	sp            *SegmentProvider
+	sp            SegmentProvider
 }
 
 // Print is intended for debugging purpose only
@@ -228,49 +207,14 @@ func (a *Array) Print() {
 	fmt.Println("====================================")
 }
 
-func (a *Array) ValidateCorrectness(expectedValues []byte) bool {
-	allValues := make([]byte, 0)
-	mseg := a.ArrayMetaSegment()
-	previousIndex := uint32(0)
-	for _, segH := range mseg.sortedSegHeaders {
-		segValues := make([]byte, 0)
-		totalSegSize := uint32(0)
-		seg := a.sp.GetSegment(segH.segID).(*ArraySegment)
-
-		for _, elem := range seg.elements {
-			if elem.index < previousIndex {
-				fmt.Println("index sequence is wrong")
-				return false
-			}
-
-			segValues = append(segValues, elem.value)
-			totalSegSize += elem.Size()
-			previousIndex = elem.index
-		}
-		if totalSegSize != seg.totalSize {
-			fmt.Println("total size is wrong")
-			return false
-		}
-
-		allValues = append(allValues, segValues...)
-	}
-
-	if !bytes.Equal(allValues, expectedValues) {
-		fmt.Println("bytes not equal")
-		return false
-	}
-
-	return true
-}
-
-func FetchArray(metaSegmentID SegmentID, sp *SegmentProvider) *Array {
+func FetchArray(metaSegmentID SegmentID, sp SegmentProvider) *Array {
 	return &Array{
 		sp:            sp,
 		metaSegmentID: metaSegmentID,
 	}
 }
 
-func NewArray(sp *SegmentProvider) *Array {
+func NewArray(sp SegmentProvider) *Array {
 	sp1 := NewArraySegment(generateUUID())
 	sp.AddSegment(sp1)
 	metaSegID := generateUUID()
@@ -421,8 +365,43 @@ func (a *Array) Append(v uint8) {
 	a.sp.AddSegment(aseg)
 }
 
+func (a *Array) ValidateCorrectness(expectedValues []byte) bool {
+	allValues := make([]byte, 0)
+	mseg := a.ArrayMetaSegment()
+	previousIndex := uint32(0)
+	for _, segH := range mseg.sortedSegHeaders {
+		segValues := make([]byte, 0)
+		totalSegSize := uint32(0)
+		seg := a.sp.GetSegment(segH.segID).(*ArraySegment)
+
+		for _, elem := range seg.elements {
+			if elem.index < previousIndex {
+				fmt.Println("index sequence is wrong")
+				return false
+			}
+
+			segValues = append(segValues, elem.value)
+			totalSegSize += elem.Size()
+			previousIndex = elem.index
+		}
+		if totalSegSize != seg.totalSize {
+			fmt.Println("total size is wrong")
+			return false
+		}
+
+		allValues = append(allValues, segValues...)
+	}
+
+	if !bytes.Equal(allValues, expectedValues) {
+		fmt.Println("bytes not equal")
+		return false
+	}
+
+	return true
+}
+
 func main() {
-	sp := NewSegmentProvider()
+	sp := NewBasicSegmentProvider()
 	aa := NewArray(sp)
 	fmt.Println("append to loc 0")
 	aa.Append(1)
