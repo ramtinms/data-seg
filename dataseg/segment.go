@@ -1,5 +1,13 @@
 package main
 
+type SegmentID int
+
+type Segment interface {
+	ID() SegmentID     // returns a unique id for this segment used for storage
+	Encoded() []byte   // produces encoded value of this segment for storage
+	Load([]byte) error // loads the segment using the byte slice provided
+}
+
 type SegmentProvider interface {
 	GetSegment(id SegmentID) Segment
 	AddSegment(seg Segment)
