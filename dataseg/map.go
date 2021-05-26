@@ -5,6 +5,9 @@ import (
 	"math"
 )
 
+// another idea to have list with just map augmented
+// look up always by last key comparision
+
 // MapItem holds anything that has to be stored in a map
 type MapItem interface {
 	Key() string
@@ -34,18 +37,18 @@ func (s StringMapItem) Size() uint32    { return uint32(len(s.key) + len(s.value
 type MapSegment struct {
 	id        SegmentID
 	totalSize uint32
-	mask      Mask               // Mask captures valid prefixes for this segment
-	keys      []string           // keeps ordered keys
-	lookup    map[string]MapItem // lookup is used for fast lookup for get
+	// mask      Mask               // Mask captures valid prefixes for this segment
+	keys   []string           // keeps ordered keys
+	lookup map[string]MapItem // lookup is used for fast lookup for get
 }
 
 func NewMapSegment(id SegmentID) *MapSegment {
 	return &MapSegment{
 		id:        id,
 		totalSize: 0,
-		mask:      NewAcceptAllMask(),
-		keys:      make([]string, 0),
-		lookup:    make(map[string]MapItem, 0),
+		// mask:      NewAcceptAllMask(),
+		keys:   make([]string, 0),
+		lookup: make(map[string]MapItem, 0),
 	}
 }
 
@@ -74,11 +77,11 @@ func (a *MapSegment) AddItem(s MapItem) {
 	if s.Size() > maxItemSize {
 		return
 	}
-	// this should never happen but lets keep it for sanity check for now
-	if !a.mask.IsMember(s.Key()) {
-		fmt.Println("NOT A MEMBER !!!!")
-		return
-	}
+	// // this should never happen but lets keep it for sanity check for now
+	// if !a.mask.IsMember(s.Key()) {
+	// 	fmt.Println("NOT A MEMBER !!!!")
+	// 	return
+	// }
 
 	if s.Key() < a.FirstKey() {
 		// prepend
@@ -161,19 +164,19 @@ func (a *MapSegment) Split() (seg2 *MapSegment) {
 
 	}
 
-	m1, m2 := NewSplitMasks(a.mask, a.LastKey(), newSeg.keys[0])
-	newSeg.mask = m2
-	a.mask = m1
+	// m1, m2 := NewSplitMasks(a.mask, a.LastKey(), newSeg.keys[0])
+	// newSeg.mask = m2
+	// a.mask = m1
 	a.keys = a.keys[:breakPoint]
 	return newSeg
 }
 
 func (a *MapSegment) Merge(seg2 *MapSegment) {
-	if a.mask.index != seg2.mask.index {
-		fmt.Println("Warning merging segments that are not parallel")
-		return
-	}
-	a.mask.index = uint32(findLastCommonBit(a.FirstKey(), a.LastKey()))
+	// if a.mask.index != seg2.mask.index {
+	// 	fmt.Println("Warning merging segments that are not parallel")
+	// 	return
+	// }
+	// a.mask.index = uint32(findLastCommonBit(a.FirstKey(), a.LastKey()))
 	a.keys = append(a.keys, seg2.keys...)
 	for k, v := range seg2.lookup {
 		a.lookup[k] = v
@@ -197,16 +200,18 @@ func (a MapSegment) Load([]byte) error {
 
 func (a *MapSegment) Header() MapSegmentHeader {
 	return MapSegmentHeader{
-		mask:  a.mask,
-		size:  a.totalSize,
-		segID: a.id,
+		// mask:  a.mask,
+		firstKey: a.FirstKey(),
+		size:     a.totalSize,
+		segID:    a.id,
 	}
 }
 
 type MapSegmentHeader struct {
-	mask  Mask
-	size  uint32
-	segID SegmentID
+	// mask  Mask
+	firstKey string
+	size     uint32
+	segID    SegmentID
 }
 
 type MapMetaSegment struct {
@@ -276,12 +281,18 @@ func (a *Map) FindSegmentIndex(key string) int {
 	// TODO optimize this read and pass it as param
 	mseg := a.MapMetaSegment()
 	for i, segH := range mseg.sortedSegHeaders {
-		if segH.mask.IsMember(key) {
+		if key == segH.firstKey {
 			return i
 		}
+		if key < segH.firstKey {
+			if i == 0 {
+				return 0
+			}
+			// TODO look at sizes and decide (optimize)
+			return i - 1
+		}
 	}
-	// this should never happen
-	return 0
+	return len(mseg.sortedSegHeaders) - 1
 }
 
 func (a *Map) Insert(inp MapItem) {
@@ -361,6 +372,9 @@ func (a *Map) Remove(key string) {
 					a.sp.AddSegment(mseg)
 				}
 			}
+			return
 		}
 	}
+	a.sp.AddSegment(mseg)
+	a.sp.AddSegment(aseg)
 }

@@ -81,8 +81,10 @@ func mapExample() {
 	mm.Print()
 	mm.Insert(StringMapItem{"F", "FFFF"})
 	mm.Print()
-	mm.Get("H")
-	mm.Get("A")
+	fmt.Println(mm.Get("H"))
+	fmt.Println(mm.Get("A"))
+	mm.Remove("D")
+	mm.Print()
 }
 
 func main() {

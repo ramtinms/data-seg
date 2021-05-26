@@ -261,6 +261,9 @@ func (a *Array) FindSegmentIndex(inpIndex uint32) int {
 	// TODO optimize this read and pass it as param
 	mseg := a.ArrayMetaSegment()
 	for i, segH := range mseg.sortedSegHeaders {
+		if inpIndex == segH.startIndex {
+			return i
+		}
 		if inpIndex < segH.startIndex {
 			if i == 0 {
 				return 0
@@ -365,8 +368,11 @@ func (a *Array) Remove(index uint32) {
 					a.sp.AddSegment(mseg)
 				}
 			}
+			return
 		}
 	}
+	a.sp.AddSegment(mseg)
+	a.sp.AddSegment(aseg)
 }
 
 func (a *Array) AppendByteArrayItem(v uint8) {
